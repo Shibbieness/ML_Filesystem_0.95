@@ -251,7 +251,7 @@ CREATE TABLE api_connections (
     name VARCHAR(200) NOT NULL,
     description TEXT,
     service_type VARCHAR(50) NOT NULL,  -- Enum: ai_inference, streaming, social_media, storage, analytics, custom
-    provider VARCHAR(100),              -- e.g., "Anthropic", "OpenAI"
+    provider VARCHAR(100),              -- a key in core/providers.PROVIDERS, or a custom id
     api_key VARCHAR(500),               -- Encrypted in production
     base_url VARCHAR(500),
     model_name VARCHAR(100),
@@ -674,9 +674,9 @@ class HybridMLAgent:
         # Returns: {summary: str, patterns: list, insights: list}
         
     def _call_api(self, prompt: str, model: str = None) -> str:
-        """Call Claude API (if available)"""
-        # Requires ANTHROPIC_API_KEY in environment
-        # Falls back gracefully if not available
+        """Call the configured LLM provider (if available)"""
+        # Requires LLM_API_KEY in environment; which SDK is used comes from
+        # core/providers.py. Falls back to local ML if not available.
 What Works:
 File organization via clustering
 Pattern learning from blocks
@@ -686,7 +686,7 @@ API fallback
 Dependencies Satisfied:
 LocalMLBackend
 TrainingBlockManager
-anthropic SDK (optional)
+provider SDK (optional)
 scikit-learn for clustering
 What Does NOT Work:
 PARTIAL: Training block binding not strictly enforced
@@ -1057,7 +1057,7 @@ class APIConnectionManager:
 Service-Specific Testing:
 def _test_ai_connection(self, connection: APIConnection) -> dict:
     """Test AI inference API"""
-    # Supports: Anthropic, OpenAI
+    # Provider comes from core/providers.py
     # Makes minimal test request
     
 def _test_streaming_connection(self, connection: APIConnection) -> dict:
@@ -1078,7 +1078,7 @@ Usage tracking
 Toggle enable/disable
 Dependencies Satisfied:
 requests==2.31.0
-anthropic SDK (optional)
+provider SDK (optional)
 openai SDK (optional)
 What Does NOT Work:
 API keys stored in plaintext (should be encrypted)
@@ -2450,15 +2450,15 @@ def create_vm(self, ...):
 Dependencies:
 QEMU (qemu-system-x86_64)
 Estimated Fix Time: 30 minutes
-2.2.4 Anthropic API Key
-Problem: API features require ANTHROPIC_API_KEY
+2.2.4 LLM Provider API Key
+Problem: API features require LLM_API_KEY
 Root Cause:
-ml/hybrid_agent.py uses Anthropic SDK
+ml/hybrid_agent.py loads a provider SDK via core/providers.py
 Reads key from environment
 No validation
 Code Location:
 # ml/hybrid_agent.py:_call_api
-api_key = os.getenv('ANTHROPIC_API_KEY')
+api_key = os.getenv('LLM_API_KEY')
 if not api_key:
     return "API key not configured"
 Impact:
@@ -2472,7 +2472,7 @@ def __init__(self, ...):
 def _get_api_key(self) -> Optional[str]:
     """Get API key from environment or config"""
     # Try environment
-    key = os.getenv('ANTHROPIC_API_KEY')
+    key = os.getenv('LLM_API_KEY')
     if key:
         return key
     
@@ -2481,19 +2481,19 @@ def _get_api_key(self) -> Optional[str]:
     if config_file.exists():
         from dotenv import load_dotenv
         load_dotenv(config_file)
-        return os.getenv('ANTHROPIC_API_KEY')
+        return os.getenv('LLM_API_KEY')
     
     return None
 
 def _call_api(self, prompt: str):
     if not self.api_key:
         raise APIException(
-            "Anthropic API key not configured. "
-            "Set ANTHROPIC_API_KEY environment variable or add to .env file"
+            "LLM provider API key not configured. "
+            "Set LLM_API_KEY environment variable or add to .env file"
         )
     # ... existing code ...
 Dependencies:
-Anthropic API account
+An LLM provider account
 API key
 Estimated Fix Time: 20 minutes
 2.3 INCOMPLETE IMPLEMENTATIONS
@@ -3998,7 +3998,7 @@ ML Infrastructure
 │  └─ Provides: Training block management
 ├─ hybrid_agent.py
 │  ├─ Depends on: local_backend.py, training_blocks.py
-│  ├─ External: anthropic (optional)
+│  ├─ External: provider SDK (optional)
 │  └─ Provides: Agent queries
 ├─ enhanced_agents.py
 │  ├─ Depends on: local_backend.py, training_blocks.py
@@ -4062,7 +4062,7 @@ Python Packages (requirements.txt)
 ├─ Vector Store
 │  └─ chromadb==0.4.18
 ├─ API Clients
-│  ├─ anthropic==0.8.0 (optional)
+│  ├─ provider SDK, see requirements-llm.txt (optional)
 │  ├─ openai==1.6.1 (optional)
 │  └─ requests==2.31.0
 ├─ VM Management
@@ -4819,7 +4819,7 @@ scikit-learn==1.3.2
 chromadb==0.4.18
 
 # API Clients
-anthropic==0.8.0
+# provider SDK: see entry/requirements-llm.txt
 openai==1.6.1
 requests==2.31.0
 
@@ -4863,7 +4863,7 @@ SANDBOX_ROOT=./sandbox
 MAX_FILE_SIZE=104857600  # 100MB in bytes
 
 # API Keys (Optional)
-ANTHROPIC_API_KEY=your-api-key-here
+LLM_API_KEY=your-api-key-here
 OPENAI_API_KEY=your-api-key-here
 
 # Paths
@@ -5276,7 +5276,7 @@ curl -X POST http://localhost:5000/api/connections \
   -d '{
     "name": "Test Connection",
     "service_type": "ai_inference",
-    "provider": "Anthropic",
+    "provider": "<provider-id>",  # a key in core/providers.PROVIDERS
     "api_key": "sk-test-key"
   }'
 
@@ -7731,7 +7731,7 @@ ML Infrastructure
 │  └─ Provides: Training block management
 ├─ hybrid_agent.py
 │  ├─ Depends on: local_backend.py, training_blocks.py
-│  ├─ External: anthropic (optional)
+│  ├─ External: provider SDK (optional)
 │  └─ Provides: Agent queries
 ├─ enhanced_agents.py
 │  ├─ Depends on: local_backend.py, training_blocks.py
@@ -7795,7 +7795,7 @@ Python Packages (requirements.txt)
 ├─ Vector Store
 │  └─ chromadb==0.4.18
 ├─ API Clients
-│  ├─ anthropic==0.8.0 (optional)
+│  ├─ provider SDK, see requirements-llm.txt (optional)
 │  ├─ openai==1.6.1 (optional)
 │  └─ requests==2.31.0
 ├─ VM Management
@@ -8552,7 +8552,7 @@ scikit-learn==1.3.2
 chromadb==0.4.18
 
 # API Clients
-anthropic==0.8.0
+# provider SDK: see entry/requirements-llm.txt
 openai==1.6.1
 requests==2.31.0
 
@@ -8596,7 +8596,7 @@ SANDBOX_ROOT=./sandbox
 MAX_FILE_SIZE=104857600  # 100MB in bytes
 
 # API Keys (Optional)
-ANTHROPIC_API_KEY=your-api-key-here
+LLM_API_KEY=your-api-key-here
 OPENAI_API_KEY=your-api-key-here
 
 # Paths
@@ -9011,7 +9011,7 @@ curl -X POST http://localhost:5000/api/connections \
   -d '{
     "name": "Test Connection",
     "service_type": "ai_inference",
-    "provider": "Anthropic",
+    "provider": "<provider-id>",  # a key in core/providers.PROVIDERS
     "api_key": "sk-test-key"
   }'
 
